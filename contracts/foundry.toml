@@ -1,0 +1,12 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.20"
+
+# Allow deploy script to write addresses.json
+fs_permissions = [{ access = "read-write", path = "./" }]
+
+[rpc_endpoints]
+anvil = "http://localhost:8545"
+

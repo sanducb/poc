@@ -1,0 +1,32 @@
+meta {
+  name: Get Wallet Addresses
+  type: graphql
+  seq: 23
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query GetWalletAddresses {
+      walletAddresses {
+          edges {
+              cursor
+              node {
+                  id
+                  publicName
+                  address
+              }
+          }
+      }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

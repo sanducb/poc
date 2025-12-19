@@ -1,0 +1,49 @@
+meta {
+  name: Set Fee
+  type: graphql
+  seq: 8
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation SetFee($input: SetFeeInput!) {
+      setFee(input: $input) {
+          fee {
+              id
+              assetId
+              type
+              fixed
+              basisPoints
+              createdAt
+          }
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+      "input": {
+          "assetId": "{{assetId}}",
+          "type": "SENDING",
+          "fee": {
+            "fixed": 100,
+            "basisPoints": 100
+          }
+      }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}
+
+tests {
+  // 
+}

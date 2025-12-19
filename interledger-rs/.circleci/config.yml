@@ -1,0 +1,243 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/rust
+    resource_class: medium
+    steps:
+      - run:
+          name: Deprecation message
+          command: |
+            echo "We have migrated to github actions, this remains as a placeholder to fulfill old configuration requirements."
+  update-docker-images:
+    docker:
+      - image: circleci/rust
+    resource_class: medium
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - checkout
+      - run:
+          # builds release profile images to be released
+          # consider parallelizing
+          name: Build Docker Images
+          no_output_timeout: 30m
+          command: |
+            if [ "${CIRCLE_BRANCH}" = "master" ] || [[ "${CIRCLE_TAG}" =~ ^ilp-node- ]]; then
+              export DOCKER_IMAGE_TAG=$(./.circleci/release/get_docker_image_tag.sh ilp-node ${CIRCLE_TAG})
+              docker/docker-build.sh ilp-node testnet-bundle
+            fi
+
+            if [ "${CIRCLE_BRANCH}" = "master" ] || [[ "${CIRCLE_TAG}" =~ ^ilp-cli- ]]; then
+              export DOCKER_IMAGE_TAG=$(./.circleci/release/get_docker_image_tag.sh ilp-cli ${CIRCLE_TAG})
+              docker/docker-build.sh ilp-cli
+            fi
+          environment:
+            PROFILE: "release"
+      - run:
+          name: Push to DockerHub
+          command: |
+            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+
+            if [ "${CIRCLE_BRANCH}" = "master" ] || [[ "${CIRCLE_TAG}" =~ ^ilp-node- ]]; then
+              DOCKER_IMAGE_TAG=$(./.circleci/release/get_docker_image_tag.sh ilp-node ${CIRCLE_TAG})
+              echo "Pushing docker image of tag: interledgerrs/ilp-node:${DOCKER_IMAGE_TAG}"
+              docker push interledgerrs/ilp-node:${DOCKER_IMAGE_TAG}
+              docker push interledgerrs/testnet-bundle:${DOCKER_IMAGE_TAG}
+            fi
+
+            if [ "${CIRCLE_BRANCH}" = "master" ] || [[ "${CIRCLE_TAG}" =~ ^ilp-cli- ]]; then
+              DOCKER_IMAGE_TAG=$(./.circleci/release/get_docker_image_tag.sh ilp-cli ${CIRCLE_TAG})
+              echo "Pushing docker image of tag: interledgerrs/ilp-cli:${DOCKER_IMAGE_TAG}"
+              docker push interledgerrs/ilp-cli:${DOCKER_IMAGE_TAG}
+            fi
+  build-release-binary-linux:
+    docker:
+      - image: circleci/rust
+    resource_class: medium
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - checkout
+      - run:
+          # Builds release profile binaries
+          # The artifact is stored in release-builds directory, which is persistent
+          name: Build binary
+          command: |
+            crate_name=$(./.circleci/release/get_crate_name.sh ${CIRCLE_TAG})
+            printf "Building crate_name: %s, tag: %s\n" "${crate_name}" "${CIRCLE_TAG}"
+            mkdir -p /tmp/release-builds/x86_64-unknown-linux-musl
+            ./.circleci/release/build_musl_binary.sh ${crate_name} /tmp/release-builds/x86_64-unknown-linux-musl/${crate_name}
+      - persist_to_workspace:
+          root: /tmp/release-builds
+          paths:
+            - x86_64-unknown-linux-musl/*
+      - store_artifacts:
+          path: /tmp/release-builds/x86_64-unknown-linux-musl
+          destination: release-builds/x86_64-unknown-linux-musl
+  build-release-binary-darwin:
+    macos:
+      xcode: "10.2.0"
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Install Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+      - run:
+          # Builds release profile binaries
+          # The artifact is stored in release-builds directory, which is persistent
+          name: Build binary
+          command: |
+            crate_name=$(./.circleci/release/get_crate_name.sh ${CIRCLE_TAG})
+            printf "Building crate_name: %s, tag: %s\n" "${crate_name}" "${CIRCLE_TAG}"
+            cargo build --release --package "${crate_name}" --bin "${crate_name}" --target x86_64-apple-darwin
+            mkdir -p /tmp/release-builds/x86_64-apple-darwin
+            cp target/x86_64-apple-darwin/release/${crate_name} /tmp/release-builds/x86_64-apple-darwin/${crate_name}
+      - persist_to_workspace:
+          root: /tmp/release-builds
+          paths:
+            - x86_64-apple-darwin/*
+      - store_artifacts:
+          path: /tmp/release-builds/x86_64-apple-darwin
+          destination: release-builds/x86_64-apple-darwin
+  release-binaries:
+    docker:
+      - image: circleci/rust
+    environment:
+      BASH_ENV: /home/circleci/.bash_circleci
+      CARGO_HOME: /home/circleci/.cargo
+    steps:
+      - attach_workspace:
+          at: /tmp/release-builds
+      - checkout
+      - run:
+          name: Install Dependencies
+          command: |
+            # install nvm
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+            export NVM_DIR="/home/circleci/.nvm"
+            source $NVM_DIR/nvm.sh
+            nvm install "v11.15.0"
+
+            # install yarn & components (conventional-changelog-cli)
+            curl -o- -L https://yarnpkg.com/install.sh | bash
+            export PATH="/home/circleci/.yarn/bin:/home/circleci/.config/yarn/global/node_modules/.bin:$PATH"
+            yarn global add conventional-changelog-cli
+
+            # env
+            echo 'export NVM_DIR="/home/circleci/.nvm"' >> ${BASH_ENV}
+            echo 'source $NVM_DIR/nvm.sh' >> ${BASH_ENV}
+            echo "export PATH=/home/circleci/.cargo/bin:$PATH" >> ${BASH_ENV}
+      - run:
+          name: Release Binaries
+          command: |
+            mkdir -p logs
+            crate_name=$(./.circleci/release/get_crate_name.sh ${CIRCLE_TAG})
+
+            # linux musl
+            base_dir=/tmp/release-builds/x86_64-unknown-linux-musl
+            pushd ${base_dir}
+            musl_zip="${base_dir}/${crate_name}-x86_64-unknown-linux-musl.zip"
+            musl_tar_gz="${base_dir}/${crate_name}-x86_64-unknown-linux-musl.tar.gz"
+            zip $(basename ${musl_zip}) ${crate_name}
+            tar -zcvf $(basename ${musl_tar_gz}) ${crate_name}
+            popd
+
+            # macOS
+            base_dir=/tmp/release-builds/x86_64-apple-darwin
+            pushd ${base_dir}
+            darwin_zip="${base_dir}/${crate_name}-x86_64-apple-darwin.zip"
+            darwin_tar_gz="${base_dir}/${crate_name}-x86_64-apple-darwin.tar.gz"
+            zip $(basename ${darwin_zip}) ${crate_name}
+            tar -zcvf $(basename ${darwin_tar_gz}) ${crate_name}
+            popd
+
+            # Auto-generate a release note
+            release_note=logs/release_note.txt
+            conventional-changelog -t ${crate_name}- -p angular > ${release_note}
+
+            # tag release
+            ./.circleci/release/github_release.sh \
+              ${CIRCLE_TAG} \
+              ${CIRCLE_TAG} \
+              ${release_note} \
+              ${musl_zip} \
+              ${musl_tar_gz} \
+              ${darwin_zip} \
+              ${darwin_tar_gz}
+
+            # latest release, only if on the master branch
+            # tag the current commit as (crate_name)-latest, and release it
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              tag_name="${crate_name}-latest"
+              LOG_DIR=logs/${tag_name} ./.circleci/release/github_tag.sh \
+                ${tag_name} \
+                "The latest release of ${crate_name}." \
+                "$(git rev-parse HEAD)" \
+                "commit"
+              ./.circleci/release/github_release.sh \
+                ${tag_name} \
+                ${tag_name} \
+                ${release_note} \
+                ${musl_zip} \
+                ${musl_tar_gz} \
+                ${darwin_zip} \
+                ${darwin_tar_gz}
+            fi
+      - store_artifacts:
+          path: logs
+          destination: release-binaries-logs
+
+workflows:
+  version: 2
+  test-and-release:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: # we need this to kick builds when tags are given
+                - /.*/
+#         Not supported by current build plan anymore, to be deprecated in favor of github actions
+#      - update-docker-images: # updates docker images on DockerHub, only if the branch is master or something is tagged
+#          filters:
+#            branches:
+#              only: # master branch will be tagged as `latest` image
+#                - master
+#            tags:
+#              only: # whatever tagged binary crates
+#                - /^(ilp-node-|ilp-cli-).*$/
+#          requires:
+#            - build
+#      - build-release-binary-linux:
+#          filters:
+#            branches:
+#              ignore: # no branch pushes are built
+#                - /.*/
+#            tags:
+#              only: # whatever tagged binary crates
+#                - /^(ilp-node-|ilp-cli-).*$/
+#          requires:
+#            - build
+#      - build-release-binary-darwin:
+#          filters:
+#            branches:
+#              ignore: # no branch pushes are built
+#                - /.*/
+#            tags:
+#              only: # whatever tagged binary crates
+#                - /^(ilp-node-|ilp-cli-).*$/
+#          requires:
+#            - build
+#      - release-binaries:
+#          filters:
+#            branches:
+#              ignore: # no branch pushes are built
+#                - /.*/
+#            tags:
+#              only: # whatever tagged binary crates
+#                - /^(ilp-node-|ilp-cli-).*$/
+#          requires:
+#            - build-release-binary-linux
+#            - build-release-binary-darwin

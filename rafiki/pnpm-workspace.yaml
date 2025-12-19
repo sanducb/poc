@@ -1,0 +1,5 @@
+packages:
+  - 'packages/*'
+  - 'localenv/mock-account-servicing-entity'
+  - 'test/*'
+  - 'bruno/collections/Rafiki'

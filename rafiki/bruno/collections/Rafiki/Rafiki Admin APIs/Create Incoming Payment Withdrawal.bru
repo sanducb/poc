@@ -1,0 +1,38 @@
+meta {
+  name: Withdraw Incoming Payment Liquidity
+  type: graphql
+  seq: 28
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateIncomingPaymentWithdrawal($input: CreateIncomingPaymentWithdrawalInput!) {  
+      createIncomingPaymentWithdrawal(input: $input) {    
+      	success
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+      "input": {
+          "incomingPaymentId": "{{incomingPaymentId}}",
+          "idempotencyKey": "{{idempotencyKey}}",
+          "timeoutSeconds": {{withdrawalTimeout}}
+      }
+  }
+}
+
+script:pre-request {
+  const { v4: uuidv4 } = require('uuid');
+  const scripts = require('./scripts');
+  
+  bru.setVar("idempotencyKey",uuidv4());
+  
+  scripts.addApiSignatureHeader();
+}

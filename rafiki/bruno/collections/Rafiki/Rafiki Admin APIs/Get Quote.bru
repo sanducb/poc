@@ -1,0 +1,46 @@
+meta {
+  name: Get Quote
+  type: graphql
+  seq: 32
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query GetQuote($id: String!) {
+      quote(id: $id) {
+          createdAt
+          expiresAt
+          id
+          walletAddressId
+          estimatedExchangeRate
+          receiveAmount {
+              assetCode
+              assetScale
+              value
+          }
+          receiver
+          debitAmount {
+              assetCode
+              assetScale
+              value
+          }
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+      "id": "{{quoteId}}"
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

@@ -1,0 +1,14 @@
+{
+  "username": "rafiki",
+  "ilp_address": "test.rafiki",
+  "asset_code": "EURC",
+  "asset_scale": 6,
+  "max_packet_amount": 1000000000,
+  "ilp_over_http_incoming_token": "rafiki-to-receiver-token",
+  "ilp_over_http_outgoing_token": "receiver-to-rafiki-token",
+  "ilp_over_http_url": "http://localhost:3002/",
+  "routing_relation": "Peer",
+  "settle_to": 0,
+  "settle_threshold": 0
+}
+

@@ -1,0 +1,39 @@
+[package]
+name = "interledger-btp"
+version = "1.0.0"
+authors = ["Evan Schwartz <evan@ripple.com>"]
+description = "Bilateral Transfer Protocol (BTP) client and server services for Interledger.rs"
+license = "Apache-2.0"
+edition = "2018"
+repository = "https://github.com/interledger-rs/interledger-rs"
+
+[features]
+strict = ["interledger-packet/strict"]
+
+[dependencies]
+interledger-errors = { path = "../interledger-errors", version = "1.0.0", default-features = false }
+interledger-packet = { path = "../interledger-packet", version = "1.0.0", default-features = false }
+interledger-service = { path = "../interledger-service", version = "1.0.0", default-features = false }
+
+bytes = { version = "1.0.1" }
+chrono = { version = "0.4.20", default-features = false }
+futures = { version = "0.3.7", default-features = false, features = ["std"] }
+tracing = { version = "0.1.12", default-features = false, features = ["log"] }
+parking_lot = { version = "0.10.0", default-features = false }
+thiserror = { version = "1.0.10", default-features = false }
+rand = { version = "0.7.2", default-features = false, features = ["std"] }
+stream-cancel = { version = "0.8.1", default-features = false }
+tokio-tungstenite = { version = "0.15.0", default-features = false, features = ["native-tls", "connect"] }
+url = { version = "2.1.1", default-features = false }
+uuid = { version = "0.8.1", default-features = false, features = ["v4"]}
+warp = { version = "0.3.1", default-features = false, features = ["websocket"] }
+secrecy = { version = "0.8", default-features = false, features = ["alloc"] }
+async-trait = { version = "0.1.22", default-features = false }
+tokio = { version = "1.9.0", default-features = false, features = ["rt", "time", "macros"] }
+tokio-stream = { version = "0.1.7" }
+once_cell = { version = "1.3.1", default-features = false }
+pin-project = { version = "1.0", default-features = false }
+
+[dev-dependencies]
+hex-literal = "0.3"
+socket2 = "0.4.0"

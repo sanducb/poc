@@ -1,0 +1,88 @@
+meta {
+  name: Get Wallet Address
+  type: graphql
+  seq: 21
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query GetWalletAddress($id: String!) {
+      walletAddress(id: $id) {
+          id
+          asset {
+              id
+              code
+              scale
+              withdrawalThreshold
+              createdAt
+          }
+          createdAt
+          incomingPayments {
+              edges {
+                  node {
+                      id
+                      state
+                      incomingAmount {
+                          value
+                      }
+                      receivedAmount {
+                          value
+                      }
+                  }
+                  cursor
+              }
+              pageInfo {
+                  endCursor
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+              }
+          }
+          walletAddressKeys {
+            edges {
+              node {
+                id
+                jwk {
+                  kid
+                  x
+                  alg
+                  kty
+                  crv
+                }
+                revoked
+                createdAt
+              }
+            }
+            pageInfo {
+              endCursor
+              hasNextPage
+              hasPreviousPage
+              startCursor
+            }
+          }
+          status
+          additionalProperties {
+            key
+            value
+            visibleInOpenPayments
+          }
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+      "id": "{{walletAddressId}}"
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

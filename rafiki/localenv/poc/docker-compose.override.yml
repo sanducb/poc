@@ -1,0 +1,16 @@
+services:
+  cloud-nine-backend:
+    environment:
+      ILP_ADDRESS: example.rafiki
+      API_SECRET: iyIgCprjb9uL8wFckR+pLEkJWMB7FJhgkvqhTQR/964=
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  cloud-nine-mock-ase:
+    environment:
+      SEED_FILE_LOCATION: /workspace/seed.poc.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../cloud-nine-wallet/seed.poc.yml:/workspace/seed.poc.yml:ro
+

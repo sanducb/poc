@@ -1,0 +1,306 @@
+import { IncomingPaymentWithPaymentMethods as OpenPaymentsIncomingPaymentWithPaymentMethods } from '@interledger/open-payments'
+import { WalletAddressService } from '../wallet_address/service'
+import { BaseService } from '../../shared/baseService'
+import { IncomingPaymentService } from '../payment/incoming/service'
+import { WalletAddress } from '../wallet_address/model'
+import { Receiver } from './model'
+import { Amount } from '../amount'
+import { RemoteIncomingPaymentService } from '../payment/incoming_remote/service'
+import {
+  IncomingPaymentError,
+  isIncomingPaymentError
+} from '../payment/incoming/errors'
+import {
+  isReceiverError,
+  ReceiverError,
+  errorToMessage as receiverErrorToMessage
+} from './errors'
+import { isRemoteIncomingPaymentError } from '../payment/incoming_remote/errors'
+import { TelemetryService } from '../../telemetry/service'
+import { IAppConfig } from '../../config/app'
+import { PaymentMethodProviderService } from '../../payment-method/provider/service'
+import { IncomingPaymentInitiationReason } from '../payment/incoming/types'
+
+interface CreateReceiverArgs {
+  walletAddressUrl: string
+  expiresAt?: Date
+  incomingAmount?: Amount
+  metadata?: Record<string, unknown>
+  tenantId: string
+}
+
+// A receiver is resolved from an incoming payment
+export interface ReceiverService {
+  get(url: string): Promise<Receiver | undefined>
+  create(args: CreateReceiverArgs): Promise<Receiver | ReceiverError>
+  complete(url: string): Promise<Receiver | ReceiverError>
+}
+
+export interface ServiceDependencies extends BaseService {
+  config: IAppConfig
+  incomingPaymentService: IncomingPaymentService
+  walletAddressService: WalletAddressService
+  remoteIncomingPaymentService: RemoteIncomingPaymentService
+  telemetry: TelemetryService
+  paymentMethodProviderService: PaymentMethodProviderService
+}
+
+const INCOMING_PAYMENT_URL_REGEX =
+  /(?<resourceServerUrl>^(.)+)\/incoming-payments\/(?<id>(.){36}$)/
+
+export async function createReceiverService(
+  deps_: ServiceDependencies
+): Promise<ReceiverService> {
+  const log = deps_.logger.child({
+    service: 'ReceiverService'
+  })
+  const deps: ServiceDependencies = {
+    ...deps_,
+    logger: log
+  }
+
+  return {
+    get: (url) => getReceiver(deps, url),
+    create: (url) => createReceiver(deps, url),
+    complete: (url) => completeIncomingPayment(deps, url)
+  }
+}
+
+async function createReceiver(
+  deps: ServiceDependencies,
+  args: CreateReceiverArgs
+): Promise<Receiver | ReceiverError> {
+  const localWalletAddress = await deps.walletAddressService.getByUrl(
+    args.walletAddressUrl
+  )
+  const isLocal = !!localWalletAddress
+
+  const incomingPaymentOrError = isLocal
+    ? await createLocalIncomingPayment(deps, args, localWalletAddress)
+    : await deps.remoteIncomingPaymentService.create(args)
+
+  if (isReceiverError(incomingPaymentOrError)) {
+    return incomingPaymentOrError
+  }
+
+  try {
+    const receiver = new Receiver(incomingPaymentOrError, isLocal)
+
+    if (!receiver.isActive()) {
+      throw new Error('Receiver is not active')
+    }
+
+    return receiver
+  } catch (error) {
+    const errorMessage = 'Could not create receiver from incoming payment'
+    deps.logger.error(
+      {
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unknown error'
+      },
+      errorMessage
+    )
+
+    throw new Error(errorMessage, { cause: error })
+  }
+}
+
+async function createLocalIncomingPayment(
+  deps: ServiceDependencies,
+  args: CreateReceiverArgs,
+  walletAddress: WalletAddress
+): Promise<OpenPaymentsIncomingPaymentWithPaymentMethods | ReceiverError> {
+  const { expiresAt, incomingAmount, metadata, tenantId } = args
+
+  const incomingPaymentOrError = await deps.incomingPaymentService.create({
+    walletAddressId: walletAddress.id,
+    expiresAt,
+    incomingAmount,
+    metadata,
+    tenantId,
+    initiationReason: IncomingPaymentInitiationReason.Admin
+  })
+
+  if (isIncomingPaymentError(incomingPaymentOrError)) {
+    const errorMessage = 'Could not create local incoming payment'
+    deps.logger.error(
+      { error: receiverErrorToMessage(incomingPaymentOrError) },
+      errorMessage
+    )
+
+    return incomingPaymentOrError
+  }
+
+  const paymentMethods =
+    await deps.paymentMethodProviderService.getPaymentMethods(
+      incomingPaymentOrError
+    )
+
+  if (paymentMethods.length === 0) {
+    const errorMessage =
+      'Could not get any payment methods during local incoming payment creation'
+    deps.logger.error(
+      { incomingPaymentId: incomingPaymentOrError.id },
+      errorMessage
+    )
+
+    throw new Error(errorMessage)
+  }
+
+  return incomingPaymentOrError.toOpenPaymentsTypeWithMethods(
+    deps.config.openPaymentsUrl,
+    walletAddress,
+    paymentMethods
+  )
+}
+
+async function getReceiver(
+  deps: ServiceDependencies,
+  url: string
+): Promise<Receiver | undefined> {
+  const stopTimer = deps.telemetry.startTimer('getReceiver', {
+    callName: 'ReceiverService:get'
+  })
+  try {
+    const localIncomingPayment = await getLocalIncomingPayment(deps, url)
+    if (localIncomingPayment) {
+      const receiver = new Receiver(localIncomingPayment, true)
+      return receiver
+    }
+
+    const remoteIncomingPayment = await getRemoteIncomingPayment(deps, url)
+    if (remoteIncomingPayment) {
+      const receiver = new Receiver(remoteIncomingPayment, false)
+      return receiver
+    }
+  } catch (err) {
+    deps.logger.error(
+      { errorMessage: err instanceof Error && err.message },
+      'Could not get incoming payment'
+    )
+  } finally {
+    stopTimer()
+  }
+}
+
+function parseIncomingPaymentUrl(
+  url: string
+): { id: string; resourceServerUrl: string } | undefined {
+  const match = url.match(INCOMING_PAYMENT_URL_REGEX)?.groups
+  if (!match || !match.resourceServerUrl || !match.id) {
+    return undefined
+  }
+
+  return {
+    id: match.id,
+    resourceServerUrl: match.resourceServerUrl
+  }
+}
+
+export async function getLocalIncomingPayment(
+  deps: ServiceDependencies,
+  url: string
+): Promise<OpenPaymentsIncomingPaymentWithPaymentMethods | undefined> {
+  const urlParseResult = parseIncomingPaymentUrl(url)
+  if (!urlParseResult) {
+    deps.logger.error({ url }, 'Could not parse incoming payment url')
+    return undefined
+  }
+
+  const incomingPayment = await deps.incomingPaymentService.get({
+    id: urlParseResult.id
+  })
+
+  if (!incomingPayment) {
+    return undefined
+  }
+
+  if (!incomingPayment.walletAddress) {
+    const errorMessage = 'Wallet address does not exist for incoming payment'
+    deps.logger.error({ incomingPaymentId: incomingPayment.id }, errorMessage)
+
+    throw new Error(errorMessage)
+  }
+
+  const paymentMethods =
+    await deps.paymentMethodProviderService.getPaymentMethods(incomingPayment)
+
+  return incomingPayment.toOpenPaymentsTypeWithMethods(
+    deps.config.openPaymentsUrl,
+    incomingPayment.walletAddress,
+    paymentMethods
+  )
+}
+
+async function getRemoteIncomingPayment(
+  deps: ServiceDependencies,
+  url: string
+): Promise<OpenPaymentsIncomingPaymentWithPaymentMethods | undefined> {
+  const incomingPaymentOrError =
+    await deps.remoteIncomingPaymentService.get(url)
+
+  if (isRemoteIncomingPaymentError(incomingPaymentOrError)) {
+    return undefined
+  }
+
+  return incomingPaymentOrError
+}
+
+export async function completeIncomingPayment(
+  deps: ServiceDependencies,
+  url: string
+): Promise<Receiver | ReceiverError> {
+  const receiver = await getReceiver(deps, url)
+  if (!receiver) {
+    const errorMessage = 'No incoming payment found'
+    deps.logger.error({ url }, errorMessage)
+    return IncomingPaymentError.UnknownPayment
+  }
+
+  if (receiver.isLocal) {
+    const urlParseResult = parseIncomingPaymentUrl(url)
+    if (!urlParseResult) {
+      const errorMessage = 'Incorrect format for incoming payment URL'
+      deps.logger.error({
+        context: { incomingPaymentUrl: url },
+        message: errorMessage
+      })
+      throw new Error(errorMessage)
+    }
+
+    const incomingPayment = await deps.incomingPaymentService.complete(
+      urlParseResult.id
+    )
+    if (isReceiverError(incomingPayment)) {
+      return incomingPayment
+    }
+    if (!incomingPayment.walletAddress) {
+      const errorMessage = 'Wallet address does not exist for incoming payment'
+      deps.logger.error({
+        context: { incomingPaymentId: incomingPayment.id },
+        message: errorMessage
+      })
+      return IncomingPaymentError.UnknownWalletAddress
+    }
+    const openPaymentsPayment = incomingPayment.toOpenPaymentsType(
+      deps.config.openPaymentsUrl,
+      incomingPayment.walletAddress
+    )
+    return new Receiver(
+      { ...openPaymentsPayment, methods: [] },
+      receiver.isLocal
+    )
+  }
+
+  const remoteIncomingPayment =
+    await deps.remoteIncomingPaymentService.complete(url)
+  if (isReceiverError(remoteIncomingPayment)) {
+    return remoteIncomingPayment
+  }
+  return new Receiver(
+    { ...remoteIncomingPayment, methods: [] },
+    receiver.isLocal
+  )
+}

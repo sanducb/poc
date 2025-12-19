@@ -1,0 +1,51 @@
+meta {
+  name: Create Asset
+  type: graphql
+  seq: 1
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateAsset($input: CreateAssetInput!) {
+    createAsset(input: $input) {
+      asset {
+        code
+        createdAt
+        id
+        scale
+        withdrawalThreshold
+        liquidityThreshold
+      }
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "code": "JPY",
+      "scale": 6,
+      "withdrawalThreshold": null,
+      "liquidityThreshold": "100000000"
+    }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.data) {
+    bru.setEnvVar("assetId", body.data.createAsset.asset?.id);
+  }
+}

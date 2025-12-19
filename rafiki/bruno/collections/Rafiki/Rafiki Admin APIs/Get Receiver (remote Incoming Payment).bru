@@ -1,0 +1,46 @@
+meta {
+  name: Get Receiver (remote Incoming Payment)
+  type: graphql
+  seq: 30
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query GetReceiver($id: String!) {
+      receiver(id: $id) {
+          id
+          completed
+          expiresAt
+          metadata
+          incomingAmount {
+              assetCode
+              assetScale
+              value
+          }
+          walletAddressUrl
+          receivedAmount {
+              assetCode
+              assetScale
+              value
+          }
+          createdAt
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+      "id": "{{receiverId}}"
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

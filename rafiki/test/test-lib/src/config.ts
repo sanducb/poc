@@ -1,0 +1,102 @@
+import { parse } from 'yaml'
+import { readFileSync } from 'fs'
+import { loadKey } from '@interledger/http-signature-utils'
+import type { Config } from 'mock-account-service-lib'
+import { parse as envParse } from 'dotenv'
+
+import { resolve } from 'path'
+
+export type TestConfig = Config & {
+  integrationServerPort: number
+  interactionServer: string
+  walletAddressUrl: string
+  keyId: string
+  signatureSecret: string
+  signatureVersion: string
+  operatorTenantId: string
+  cardServiceUrl?: string
+  posServiceUrl?: string
+}
+
+type EnvConfig = {
+  OPEN_PAYMENTS_URL: string
+  AUTH_SERVER_DOMAIN: string
+  INTERACTION_SERVER: string
+  INTEGRATION_SERVER_PORT: string
+  WALLET_ADDRESS_URL: string
+  GRAPHQL_URL: string
+  KEY_ID: string
+  IDP_SECRET: string
+  SIGNATURE_SECRET: string
+  SIGNATURE_VERSION: string
+  OPERATOR_TENANT_ID: string
+  IS_TENANT: string
+  AUTH_IDP_SERVICE_DOMAIN: string
+  INTERACTION_RETURN_URL: string
+  CARD_SERVICE_URL?: string
+  POS_SERVICE_URL?: string
+}
+
+const REQUIRED_KEYS: (keyof EnvConfig)[] = [
+  'OPEN_PAYMENTS_URL',
+  'AUTH_SERVER_DOMAIN',
+  'INTERACTION_SERVER',
+  'INTEGRATION_SERVER_PORT',
+  'WALLET_ADDRESS_URL',
+  'GRAPHQL_URL',
+  'KEY_ID',
+  'IDP_SECRET',
+  'SIGNATURE_SECRET',
+  'SIGNATURE_VERSION',
+  'OPERATOR_TENANT_ID'
+]
+
+const loadEnv = (filePath: string): EnvConfig => {
+  const fileContent = readFileSync(filePath)
+  const envVars = envParse(fileContent)
+
+  const missingKeys: string[] = []
+  REQUIRED_KEYS.forEach((key) => {
+    if (!envVars[key]) {
+      missingKeys.push(key)
+    }
+  })
+
+  if (missingKeys.length > 0) {
+    const errorMessage = `Missing required environment variable(s): ${missingKeys.join(', ')}`
+    throw new Error(errorMessage)
+  }
+
+  return envVars as EnvConfig
+}
+
+const createConfig = (name: string): TestConfig => {
+  const seedPath = resolve(__dirname, `../../testenv/${name}/seed.yml`)
+  const env = loadEnv(resolve(__dirname, `../../testenv/${name}/.env`))
+  const keyPath = resolve(__dirname, `../../testenv/private-key.pem`)
+
+  return {
+    seed: parse(readFileSync(seedPath).toString('utf8')),
+    key: loadKey(keyPath),
+    publicHost: env.OPEN_PAYMENTS_URL,
+    testnetAutoPeerUrl: '',
+    authServerDomain: env.AUTH_SERVER_DOMAIN,
+    interactionServer: env.INTERACTION_SERVER,
+    integrationServerPort: parseInt(env.INTEGRATION_SERVER_PORT),
+    walletAddressUrl: env.WALLET_ADDRESS_URL,
+    graphqlUrl: env.GRAPHQL_URL,
+    keyId: env.KEY_ID,
+    idpSecret: env.IDP_SECRET,
+    signatureSecret: env.SIGNATURE_SECRET,
+    signatureVersion: env.SIGNATURE_VERSION,
+    operatorTenantId: env.OPERATOR_TENANT_ID,
+    isTenant: env.IS_TENANT === 'true',
+    authIdpServiceDomain: env.AUTH_IDP_SERVICE_DOMAIN,
+    interactionReturnUrl: env.INTERACTION_RETURN_URL,
+    cardServiceUrl: env.CARD_SERVICE_URL,
+    posServiceUrl: env.POS_SERVICE_URL
+  }
+}
+
+export const C9_CONFIG: TestConfig = createConfig('cloud-nine-wallet')
+export const HLB_CONFIG: TestConfig = createConfig('happy-life-bank')

@@ -1,0 +1,48 @@
+meta {
+  name: Update Wallet Address
+  type: graphql
+  seq: 20
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation UpdateWalletAddress($input: UpdateWalletAddressInput!) {
+      updateWalletAddress(input: $input) {
+          walletAddress {
+              id
+              asset {
+                  id
+                  code
+                  scale
+                  withdrawalThreshold
+                  createdAt
+              }
+              address
+              publicName
+              createdAt
+              status
+          }
+      }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "id": "{{walletAddressId}}",
+      "publicName": "New Name",
+      "status": "ACTIVE"
+    }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

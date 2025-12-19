@@ -1,0 +1,54 @@
+meta {
+  name: Get Accounting Ledger Transfers
+  type: graphql
+  seq: 2
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query AccountingTransfers($id: String!, $limit: Int) {
+    accountingTransfers(id: $id, limit: $limit) {
+      debits {
+        id
+        debitAccountId
+        creditAccountId
+        amount
+        transferType
+        ledger
+        createdAt
+        state
+        expiresAt
+      }
+      credits {
+        id
+        debitAccountId
+        creditAccountId
+        amount
+        transferType
+        ledger
+        createdAt
+        state
+        expiresAt
+      }
+    }
+  }
+  
+}
+
+body:graphql:vars {
+  {
+      // Provide a 'ledger account identifier' (id):
+      "id": "{{assetIdTigerBeetle}}"
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

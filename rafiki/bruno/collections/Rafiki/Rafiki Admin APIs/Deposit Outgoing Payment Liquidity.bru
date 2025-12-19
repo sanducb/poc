@@ -1,0 +1,38 @@
+meta {
+  name: Deposit Outgoing Payment Liquidity
+  type: graphql
+  seq: 39
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation DepositOutgoingPaymentLiquidity($input: DepositOutgoingPaymentLiquidityInput!) {
+    depositOutgoingPaymentLiquidity(input: $input) {
+      success
+    }
+  }
+  
+}
+
+body:graphql:vars {
+  {
+      "input": {
+          "outgoingPaymentId": "{{outgoingPaymentId}}",
+          "idempotencyKey":"{{idempotencyKey}}"
+      }
+  }
+}
+
+script:pre-request {
+  const { v4: uuidv4 } = require('uuid');
+  const scripts = require('./scripts');
+  
+  bru.setVar("idempotencyKey",uuidv4());
+  
+  scripts.addApiSignatureHeader();
+}

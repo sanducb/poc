@@ -1,0 +1,34 @@
+meta {
+  name: Deposit Event Liquidity
+  type: graphql
+  seq: 38
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation DepositEventLiquidity($input: DepositEventLiquidityInput!) {
+    depositEventLiquidity(input: $input) {
+      success
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+      "input": {
+          "eventId": "b4f85d5c-652d-472d-873c-4ba2a5e39052",
+          "idempotencyKey":"{{idempotencyKey}}"
+      }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

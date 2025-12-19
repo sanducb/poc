@@ -1,0 +1,39 @@
+'pkg: backend':
+  - changed-files:
+    - any-glob-to-any-file: 'packages/backend/**/*'
+
+'pkg: frontend':
+  - changed-files:
+    - any-glob-to-any-file: 'packages/frontend/**/*'
+
+'pkg: auth':
+  - changed-files:
+    - any-glob-to-any-file: 'packages/auth/**/*'
+
+'pkg: mock-ase':
+  - changed-files:
+    - any-glob-to-any-file: 'localenv/mock-account-servicing-entity/**/*'
+
+'pkg: documentation':
+  - changed-files:
+    - any-glob-to-any-file: 'packages/documentation/**/*'
+
+'pkg: mock-account-service-lib':
+  - changed-files:
+    - any-glob-to-any-file: 'packages/mock-account-service-lib/**/*'
+
+'type: ci':
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+
+'type: source':
+  - changed-files:
+    - any-glob-to-any-file: ['packages/backend/src/**/*', 'packages/frontend/src/**/*', 'packages/auth/src/**/*']
+
+'type: tests':
+  - changed-files:
+    - any-glob-to-any-file: ['packages/**/*.test.ts', 'test/**/*']
+
+'type: localenv':
+  - changed-files:
+    - any-glob-to-any-file: 'localenv/*'

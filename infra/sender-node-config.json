@@ -1,0 +1,13 @@
+{
+  "ilp_address": "test.sender",
+  "secret_seed": "8852500887504328225458511465394229327394647958135038836332350604",
+  "admin_auth_token": "sender-admin-token",
+  "database_url": "redis://127.0.0.1:6379/0",
+  "http_bind_address": "0.0.0.0:7770",
+  "settlement_api_bind_address": "0.0.0.0:7771",
+  "exchange_rate": {
+    "poll_interval": 60000,
+    "spread": 0
+  }
+}
+

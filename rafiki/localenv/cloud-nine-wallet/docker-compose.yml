@@ -1,0 +1,221 @@
+name: c9
+services:
+  cloud-nine-wallet-card-service:
+    hostname: cloud-nine-wallet-card-service
+    image: rafiki-card-service
+    build:
+      context: ../..
+      dockerfile: ./packages/card-service/Dockerfile.dev
+    restart: always
+    networks:
+      - rafiki
+    ports:
+      - '9234:9229'
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      INSTANCE_NAME: CLOUD-NINE
+      TRUST_PROXY: ${TRUST_PROXY}
+      LOG_LEVEL: debug
+      CARD_SERVICE_PORT: 3007
+      GRAPHQL_URL: http://cloud-nine-wallet-backend:3001/graphql
+      TENANT_ID: 438fa74a-fa7d-4317-9ced-dde32ece1787
+      TENANT_SECRET: iyIgCprjb9uL8wFckR+pLEkJWMB7FJhgkvqhTQR/964=
+      TENANT_SIGNATURE_VERSION: 1
+    depends_on:
+      - shared-database
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3007/healthz"]
+      start_period: 60s
+      start_interval: 5s
+      interval: 30s
+      retries: 1
+      timeout: 3s
+  cloud-nine-mock-ase:
+    hostname: cloud-nine-wallet
+    image: rafiki-mock-ase
+    build:
+      context: ../..
+      dockerfile: ./localenv/mock-account-servicing-entity/Dockerfile
+    restart: always
+    networks:
+      - rafiki
+    ports:
+      - '3030:80'
+    environment:
+      LOG_LEVEL: debug
+      PORT: 80
+      SEED_FILE_LOCATION: /workspace/seed.yml
+      KEY_FILE: /workspace/private-key.pem
+      OPEN_PAYMENTS_URL: ${CLOUD_NINE_OPEN_PAYMENTS_URL:-https://cloud-nine-wallet-backend}
+      AUTH_SERVER_DOMAIN: ${CLOUD_NINE_AUTH_SERVER_DOMAIN:-http://localhost:3006}
+      TESTNET_AUTOPEER_URL: ${TESTNET_AUTOPEER_URL}
+      GRAPHQL_URL: http://cloud-nine-wallet-backend:3001/graphql
+      SIGNATURE_VERSION: 1
+      SIGNATURE_SECRET: iyIgCprjb9uL8wFckR+pLEkJWMB7FJhgkvqhTQR/964=
+      IDP_SECRET: 2pEcn2kkCclbOHQiGNEwhJ0rucATZhrA807HTm2rNXE=
+      DISPLAY_NAME: Cloud Nine Wallet
+      DISPLAY_ICON: wallet-icon.svg
+      OPERATOR_TENANT_ID: 438fa74a-fa7d-4317-9ced-dde32ece1787
+      FRONTEND_PORT: 3010
+    volumes:
+      - ../cloud-nine-wallet/seed.yml:/workspace/seed.yml
+      - ../cloud-nine-wallet/private-key.pem:/workspace/private-key.pem
+    depends_on:
+      cloud-nine-backend:
+        condition: service_healthy
+      shared-database:
+        condition: service_healthy
+  cloud-nine-backend:
+    hostname: cloud-nine-wallet-backend
+    image: rafiki-backend
+    build:
+      context: ../..
+      dockerfile: ./packages/backend/Dockerfile.dev
+    volumes:
+      - type: bind
+        source: ../../packages/backend/src
+        target: /home/rafiki/packages/backend/src
+        read_only: true
+    restart: always
+    privileged: true
+    ports:
+      - '3000:80'
+      - '3001:3001'
+      - '3002:3002'
+      - "9229:9229"
+    networks:
+      - rafiki
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      INSTANCE_NAME: CLOUD-NINE
+      TRUST_PROXY: ${TRUST_PROXY}
+      LOG_LEVEL: debug
+      ADMIN_PORT: 3001
+      CONNECTOR_PORT: 3002
+      OPEN_PAYMENTS_PORT: 80
+      DATABASE_URL: postgresql://cloud_nine_wallet_backend:cloud_nine_wallet_backend@shared-database/cloud_nine_wallet_backend
+      USE_TIGERBEETLE: ${USE_TIGERBEETLE-false}
+      TIGERBEETLE_CLUSTER_ID: ${TIGERBEETLE_CLUSTER_ID-0}
+      TIGERBEETLE_REPLICA_ADDRESSES: ${TIGERBEETLE_REPLICA_ADDRESSES-''}
+      AUTH_SERVER_GRANT_URL: ${CLOUD_NINE_AUTH_SERVER_DOMAIN:-http://cloud-nine-wallet-auth:3006}
+      AUTH_SERVER_INTROSPECTION_URL: http://cloud-nine-wallet-auth:3007
+      AUTH_SERVICE_API_URL: 'http://cloud-nine-wallet-auth:3011'
+      ILP_ADDRESS: ${ILP_ADDRESS:-test.cloud-nine-wallet}
+      STREAM_SECRET: BjPXtnd00G2mRQwP/8ZpwyZASOch5sUXT5o0iR5b5wU=
+      ADMIN_API_SECRET: iyIgCprjb9uL8wFckR+pLEkJWMB7FJhgkvqhTQR/964=
+      OPEN_PAYMENTS_URL: ${CLOUD_NINE_OPEN_PAYMENTS_URL:-https://cloud-nine-wallet-backend}
+      WEBHOOK_URL: http://cloud-nine-wallet/webhooks
+      EXCHANGE_RATES_URL: http://cloud-nine-wallet/rates
+      REDIS_URL: redis://shared-redis:6379/0
+      WALLET_ADDRESS_URL: ${CLOUD_NINE_WALLET_ADDRESS_URL:-https://cloud-nine-wallet-backend/.well-known/pay}
+      ILP_CONNECTOR_URL: ${CLOUD_NINE_CONNECTOR_URL:-http://cloud-nine-wallet-backend:3002}
+      ENABLE_TELEMETRY: true
+      ENABLE_ILP_TIMING_TELEMETRY: true
+      KEY_ID: 7097F83B-CB84-469E-96C6-2141C72E22C0
+      OPERATOR_TENANT_ID: 438fa74a-fa7d-4317-9ced-dde32ece1787
+      CARD_SERVICE_URL: 'http://cloud-nine-wallet-card-service:3007'
+      CARD_WEBHOOK_SERVICE_URL: 'http://cloud-nine-wallet-card-service:3007/webhook'
+      DB_ENCRYPTION_SECRET: 'zO9KogehJECHReHgQr+ZWGkmgOD4AYa4ksUxALSwgM8='
+    depends_on:
+      shared-database:
+        condition: service_healthy
+      shared-redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3001/healthz"]
+      start_period: 60s
+      start_interval: 5s
+      interval: 30s
+      retries: 1
+      timeout: 3s
+  cloud-nine-auth:
+    hostname: cloud-nine-wallet-auth
+    image: rafiki-auth
+    build:
+      context: ../..
+      dockerfile: ./packages/auth/Dockerfile.dev
+    volumes:
+      - type: bind
+        source: ../../packages/auth/src
+        target: /home/rafiki/packages/auth/src
+        read_only: true
+    restart: always
+    networks:
+      - rafiki
+    ports:
+      - '3003:3003'
+      - '3006:3006'
+      - "9230:9229"
+      - '3009:3009'
+      - '3011:3011'
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      TRUST_PROXY: ${TRUST_PROXY}
+      AUTH_DATABASE_URL: postgresql://cloud_nine_wallet_auth:cloud_nine_wallet_auth@shared-database/cloud_nine_wallet_auth
+      AUTH_SERVER_URL: ${CLOUD_NINE_AUTH_SERVER_DOMAIN:-http://localhost:3006}
+      REDIS_URL: redis://shared-redis:6379/1
+      IDENTITY_SERVER_URL: http://localhost:3030/mock-idp/
+      IDENTITY_SERVER_SECRET: 2pEcn2kkCclbOHQiGNEwhJ0rucATZhrA807HTm2rNXE=
+      COOKIE_KEY: 42397d1f371dd4b8b7d0308a689a57c882effd4ea909d792302542af47e2cd37
+      ADMIN_API_SECRET: iyIgCprjb9uL8wFckR+pLEkJWMB7FJhgkvqhTQR/964=
+      OPERATOR_TENANT_ID: 438fa74a-fa7d-4317-9ced-dde32ece1787
+      SERVICE_API_PORT: 3011
+    depends_on:
+      shared-database:
+        condition: service_healthy
+      shared-redis:
+        condition: service_started
+  shared-database:
+    image: 'postgres:15' # use latest official postgres version
+    restart: unless-stopped
+    networks:
+      - rafiki
+    volumes:
+      - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
+      - ../cloud-nine-wallet/dbinit.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  shared-redis:
+    image: 'redis:7'
+    restart: unless-stopped
+    networks:
+      - rafiki
+  cloud-nine-admin:
+    hostname: cloud-nine-wallet-admin
+    image: rafiki-frontend
+    build:
+      context: ../..
+      dockerfile: ./packages/frontend/Dockerfile.dev
+    volumes:
+      - type: bind
+        source: ../../packages/frontend/app
+        target: /home/rafiki/packages/frontend/app
+        read_only: true
+    restart: always
+    networks:
+      - rafiki
+    ports:
+      - '3010:3010'
+    environment:
+      PORT: 3010
+      LOG_LEVEL: debug
+      NODE_ENV: ${NODE_ENV:-development}
+      GRAPHQL_URL: http://cloud-nine-wallet-backend:3001/graphql
+      OPEN_PAYMENTS_URL: https://cloud-nine-wallet-backend/
+      ENABLE_INSECURE_MESSAGE_COOKIE: true
+      AUTH_ENABLED: false
+      SIGNATURE_VERSION: 1
+    depends_on:
+      - cloud-nine-backend
+
+volumes:
+  database-data: # named volumes can be managed easier using docker-compose

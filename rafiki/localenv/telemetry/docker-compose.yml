@@ -1,0 +1,76 @@
+services:
+  cloud-nine-backend:
+    environment:
+      ENABLE_TELEMETRY: true
+      ENABLE_TELEMETRY_TRACES: true
+      LIVENET: false
+      OPEN_TELEMETRY_COLLECTOR_URLS: http://otel-collector:4317
+      OPEN_TELEMETRY_TRACE_COLLECTOR_URLS: http://otel-collector:4317
+      ENABLE_ILP_TIMING_TELEMETRY: true
+
+  happy-life-backend:
+    environment:
+      ENABLE_TELEMETRY: true
+      ENABLE_TELEMETRY_TRACES: true
+      LIVENET: false
+      OPEN_TELEMETRY_COLLECTOR_URLS: http://otel-collector:4317
+      OPEN_TELEMETRY_TRACE_COLLECTOR_URLS: http://otel-collector:4317
+      ENABLE_ILP_TIMING_TELEMETRY: true
+
+  global-bank-backend:
+    environment:
+      ENABLE_TELEMETRY: true
+      ENABLE_TELEMETRY_TRACES: true
+      LIVENET: false
+      OPEN_TELEMETRY_COLLECTOR_URLS: http://otel-collector:4317
+      OPEN_TELEMETRY_TRACE_COLLECTOR_URLS: http://otel-collector:4317
+      ENABLE_ILP_TIMING_TELEMETRY: true
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: "--config=/etc/otel-collector-config.yaml"
+    networks:
+      - rafiki
+    volumes:
+      - ../telemetry/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+
+  prometheus:
+    image: prom/prometheus:latest
+    command: 
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --log.level=debug
+      - --web.enable-remote-write-receiver
+    networks:
+      - rafiki
+    volumes:
+      - ../telemetry/prometheus.yaml:/etc/prometheus/prometheus.yaml
+    ports:
+      - "9090:9090"
+
+  tempo:
+    image: grafana/tempo:latest
+    command: "-config.file=/etc/tempo.yaml"
+    networks:
+    - rafiki
+    ports:
+      - "3200:3200"
+    volumes:
+      - ../telemetry/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
+
+  grafana:
+    image: grafana/grafana:latest
+    networks:
+    - rafiki
+    ports:
+     - '4500:3000'
+    volumes:
+     - grafana_storage:/var/lib/grafana
+     - ../telemetry/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+
+volumes:
+  grafana_storage:
+  tempo-data:

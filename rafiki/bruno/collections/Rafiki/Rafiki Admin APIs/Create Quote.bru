@@ -1,0 +1,96 @@
+meta {
+  name: Create Quote
+  type: graphql
+  seq: 31
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateQuote($input: CreateQuoteInput!) {
+    createQuote(input: $input) {
+      quote {
+        createdAt
+        expiresAt
+        id
+        walletAddressId
+        receiveAmount {
+          assetCode
+          assetScale
+          value
+        }
+        receiver
+        debitAmount {
+          assetCode
+          assetScale
+          value
+        }
+      }
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "walletAddressId": "{{secondWalletAddressId}}",
+      "receiveAmount": null,
+      "receiver": "{{receiverOpenPaymentsHost}}/incoming-payments/{{incomingPaymentId}}",
+      "debitAmount": {
+        "assetCode": "USD",
+        "assetScale": 6,
+        "value": 5000000
+      }
+    }
+  }
+}
+
+script:pre-request {
+  // Create an additional wallet address to represent the account that will be sending money
+  
+  const fetch = require('node-fetch');
+  const scripts = require('./scripts');
+  
+  const randomInt = Math.floor(Math.random() * (1001));
+  
+  const initialRequest = bru.getEnvVar("initialWalletAddressRequest");
+  const postRequestBody = {
+      query: initialRequest.body.query,
+      variables: {
+        "input": {
+          "assetId": bru.getEnvVar("assetId"),
+          "url": "https://" + bru.getEnvVar("OpenPaymentsHost") + "/simon/" + randomInt,
+          "publicName": "Simon"
+      }
+      }
+    }
+  
+  const signature = scripts.generateBackendApiSignature(postRequestBody)
+  const postRequest = {
+    method: 'post',
+    headers: {
+      'Content-Type': 'application/json',
+      'tenant-id': bru.getEnvVar('senderTenantId'),
+      'signature': signature
+    },
+    body: JSON.stringify(postRequestBody)
+  };
+  
+  const response = await fetch(`${initialRequest.url}`, postRequest);
+  const body = await response.json();
+  bru.setEnvVar("secondWalletAddressId", body.data.createWalletAddress.walletAddress.id);
+  
+  scripts.addApiSignatureHeader();
+}
+
+script:post-response {
+  const body = res.getBody();
+  
+  if (body?.data) {
+    bru.setEnvVar("quoteId", body.data.createQuote.quote.id);
+  }
+}

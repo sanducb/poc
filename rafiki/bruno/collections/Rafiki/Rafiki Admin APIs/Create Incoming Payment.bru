@@ -1,0 +1,70 @@
+meta {
+  name: Create Incoming Payment
+  type: graphql
+  seq: 26
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateIncomingPayment ($input: CreateIncomingPaymentInput!) {
+      createIncomingPayment(input: $input) {
+      payment {
+        createdAt
+        expiresAt
+        metadata
+        id
+        incomingAmount {
+          assetCode
+          assetScale
+          value
+        }
+        walletAddressId
+        receivedAmount {
+          assetCode
+          assetScale
+          value
+        }
+        state
+      }
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "expiresAt": null,
+      "metadata": {
+          "externalRef": null, 
+          "description": "Hello World"
+      },
+      "incomingAmount": null,
+      "walletAddressId": "{{walletAddressId}}"
+    }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}
+
+script:post-response {
+  const body = res.getBody();
+  
+  if (body?.data) {
+    bru.setEnvVar("incomingPaymentId", body.data.createIncomingPayment.payment.id);
+  }
+}
+
+tests {
+  test("incomingPaymentId is string", function() {
+    expect(bru.getEnvVar("incomingPaymentId")).to.be.a("string");
+  })
+}

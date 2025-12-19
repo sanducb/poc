@@ -1,0 +1,44 @@
+meta {
+  name: Get Peers
+  type: graphql
+  seq: 13
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  query GetPeers {
+      peers {
+          edges {
+              cursor
+              node {
+                  id
+                  name
+                  asset {
+                      code
+                      scale
+                  }
+                  liquidity
+                  liquidityThreshold
+                  staticIlpAddress
+                  http {
+                      outgoing {
+                          authToken
+                          endpoint
+                      }
+                  }
+              }
+          }
+      }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

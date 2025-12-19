@@ -1,0 +1,80 @@
+meta {
+  name: Create Wallet Address
+  type: graphql
+  seq: 19
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateWalletAddres($input: CreateWalletAddressInput!) {
+    createWalletAddress(input: $input) {
+      walletAddress {
+        id
+        createdAt
+        publicName
+        address
+        status
+        asset {
+          code
+          createdAt
+          id
+          scale
+          withdrawalThreshold
+        }
+        additionalProperties {
+          key
+          value
+          visibleInOpenPayments
+        }
+      }
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "assetId": "{{assetId}}",
+      "address": "https://cloud-nine-wallet-backend/timon/{{randomId}}",
+      "publicName": "Timon",
+      "additionalProperties": [
+        {"key" :  "iban", "value":  "NL93 8601 1117 947", "visibleInOpenPayments":  true},
+        {"key" :  "mobile", "value":  "+31121212", "visibleInOpenPayments":  false}
+      ]
+    }
+  }
+}
+
+script:pre-request {
+  const { nanoid } = require("nanoid");
+  const scripts = require('./scripts');
+  
+  bru.setVar("randomId", nanoid());
+  
+  scripts.addApiSignatureHeader();
+}
+
+script:post-response {
+  const body = res.getBody();
+  
+  if (body?.data) {
+    bru.setEnvVar("walletAddressId", body.data.createWalletAddress.walletAddress.id);
+    bru.setEnvVar("walletAddressUrl", body.data.createWalletAddress.walletAddress.url);
+    bru.setEnvVar('initialWalletAddressRequest',req)
+  }
+}
+
+tests {
+  test("walletAddressId is string", function() {
+    expect(bru.getEnvVar("walletAddressId")).to.be.a("string");
+  })
+  test("walletAddressUrl is string", function() {
+    expect(bru.getEnvVar("walletAddressUrl")).to.be.a("string");
+  })
+  
+}

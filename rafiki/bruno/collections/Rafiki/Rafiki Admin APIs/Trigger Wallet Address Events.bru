@@ -1,0 +1,33 @@
+meta {
+  name: Trigger Wallet Address Events
+  type: graphql
+  seq: 43
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation TriggerWalletAddressEvents($input: TriggerWalletAddressEventsInput!) {
+    triggerWalletAddressEvents(input: $input) {
+      count
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+      "input": {
+          "limit": 5
+      }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}

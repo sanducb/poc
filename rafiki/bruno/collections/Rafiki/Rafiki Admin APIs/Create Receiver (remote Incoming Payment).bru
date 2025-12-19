@@ -1,0 +1,68 @@
+meta {
+  name: Create Receiver (remote Incoming Payment)
+  type: graphql
+  seq: 29
+}
+
+post {
+  url: {{RafikiGraphqlHost}}/graphql
+  body: graphql
+  auth: none
+}
+
+body:graphql {
+  mutation CreateReceiver($input: CreateReceiverInput!) {
+    createReceiver(input: $input) {
+      receiver {
+        completed
+        createdAt
+        expiresAt
+        metadata
+        id
+        incomingAmount {
+          assetCode
+          assetScale
+          value
+        }
+        walletAddressUrl
+        receivedAmount {
+          assetCode
+          assetScale
+          value
+        }
+      }
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "input": {
+      "expiresAt": null,
+      "metadata": {
+          "description": "Hello my friend",
+          "externalRef": null
+      },
+      "incomingAmount": {
+        "assetCode": "USD",
+        "assetScale": 2,
+        "value": 1002
+      },
+      "walletAddressUrl": "https://happy-life-bank-backend/accounts/pfry"
+    }
+  }
+}
+
+script:pre-request {
+  const scripts = require('./scripts');
+  
+  scripts.addApiSignatureHeader();
+}
+
+script:post-response {
+  const body = res.getBody();
+  
+  if (body?.data) {
+    bru.setEnvVar("receiverId", body.data.createReceiver.receiver.id);
+  }
+}

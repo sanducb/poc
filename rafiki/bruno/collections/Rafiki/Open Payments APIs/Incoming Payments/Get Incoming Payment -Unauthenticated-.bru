@@ -1,0 +1,21 @@
+meta {
+  name: Get Incoming Payment -Unauthenticated-
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{receiverOpenPaymentsHost}}/incoming-payments/{{incomingPaymentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Host: happy-life-bank-backend
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

@@ -1,0 +1,23 @@
+# Foundry
+/out/
+/cache/
+/lib/
+
+# Build artifacts
+*.abi
+*.bin
+
+# Broadcast logs
+/broadcast/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+

@@ -1,0 +1,287 @@
+import {
+  ResolversTypes,
+  WalletAddressResolvers,
+  MutationResolvers,
+  IncomingPayment as SchemaIncomingPayment,
+  QueryResolvers,
+  IncomingPaymentFilter
+} from '../generated/graphql'
+import { IncomingPayment } from '../../open_payments/payment/incoming/model'
+import { IncomingPaymentInitiationReason } from '../../open_payments/payment/incoming/types'
+import {
+  isIncomingPaymentError,
+  errorToCode,
+  errorToMessage
+} from '../../open_payments/payment/incoming/errors'
+import { ForTenantIdContext, TenantedApolloContext } from '../../app'
+import { getPageInfo } from '../../shared/pagination'
+import { Pagination, SortOrder } from '../../shared/baseModel'
+import { GraphQLError } from 'graphql'
+import { GraphQLErrorCode } from '../errors'
+import { IAppConfig } from '../../config/app'
+
+export const getIncomingPayment: QueryResolvers<TenantedApolloContext>['incomingPayment'] =
+  async (parent, args, ctx): Promise<ResolversTypes['IncomingPayment']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+    const payment = await incomingPaymentService.get({
+      id: args.id,
+      tenantId: ctx.isOperator ? undefined : ctx.tenant.id
+    })
+    if (!payment) {
+      throw new GraphQLError('payment does not exist', {
+        extensions: {
+          code: GraphQLErrorCode.NotFound
+        }
+      })
+    }
+    const config = await ctx.container.use('config')
+    return paymentToGraphql(payment, config)
+  }
+
+export const getIncomingPayments: QueryResolvers<TenantedApolloContext>['incomingPayments'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['IncomingPaymentConnection']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+    const { tenantId, filter, sortOrder, ...pagination } = args
+    const order = sortOrder === 'ASC' ? SortOrder.Asc : SortOrder.Desc
+    const getPageFn = (
+      pagination_: Pagination,
+      sortOrder_?: SortOrder,
+      filter_?: IncomingPaymentFilter
+    ) =>
+      incomingPaymentService.getPage({
+        tenantId: ctx.isOperator ? tenantId : ctx.tenant.id,
+        pagination: pagination_,
+        filter: filter_,
+        sortOrder: sortOrder_
+      })
+    const incomingPayments = await getPageFn(pagination, order, filter)
+    const pageInfo = await getPageInfo({
+      getPage: (
+        pagination_: Pagination,
+        sortOrder_?: SortOrder,
+        filter_?: IncomingPaymentFilter
+      ) => getPageFn(pagination_, sortOrder_, filter_),
+      page: incomingPayments,
+      sortOrder: order
+    })
+
+    const config = await ctx.container.use('config')
+
+    return {
+      pageInfo,
+      edges: incomingPayments.map((incomingPayment: IncomingPayment) => ({
+        cursor: incomingPayment.id,
+        node: paymentToGraphql(incomingPayment, config)
+      }))
+    }
+  }
+
+export const getWalletAddressIncomingPayments: WalletAddressResolvers<TenantedApolloContext>['incomingPayments'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['IncomingPaymentConnection']> => {
+    if (!parent.id) {
+      throw new GraphQLError('missing wallet address id', {
+        extensions: {
+          code: GraphQLErrorCode.BadUserInput
+        }
+      })
+    }
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+    const { sortOrder, filter, ...pagination } = args
+    const order = sortOrder === 'ASC' ? SortOrder.Asc : SortOrder.Desc
+    const incomingPayments = await incomingPaymentService.getPage({
+      walletAddressId: parent.id,
+      pagination,
+      sortOrder: order,
+      tenantId: ctx.isOperator ? undefined : ctx.tenant.id,
+      filter
+    })
+    const pageInfo = await getPageInfo({
+      getPage: (pagination: Pagination, sortOrder?: SortOrder) =>
+        incomingPaymentService.getPage({
+          walletAddressId: parent.id as string,
+          pagination,
+          sortOrder,
+          tenantId: ctx.tenant.id,
+          filter
+        }),
+      page: incomingPayments,
+      sortOrder: order
+    })
+
+    const config = await ctx.container.use('config')
+    return {
+      pageInfo,
+      edges: incomingPayments.map((incomingPayment: IncomingPayment) => {
+        return {
+          cursor: incomingPayment.id,
+          node: paymentToGraphql(incomingPayment, config)
+        }
+      })
+    }
+  }
+export const createIncomingPayment: MutationResolvers<ForTenantIdContext>['createIncomingPayment'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['IncomingPaymentResponse']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+
+    const tenantId = ctx.forTenantId
+    if (!tenantId) {
+      throw new Error('Missing tenant id to create incoming payment')
+    }
+
+    if (!ctx.isOperator && args.input.isCardPayment) {
+      ctx.logger.warn(
+        { input: args.input, tenant: ctx.tenant },
+        'non-operator cannot create card payment'
+      )
+    }
+
+    const incomingPaymentOrError = await incomingPaymentService.create({
+      walletAddressId: args.input.walletAddressId,
+      expiresAt: !args.input.expiresAt
+        ? undefined
+        : new Date(args.input.expiresAt),
+      incomingAmount: args.input.incomingAmount,
+      metadata: args.input.metadata,
+      tenantId,
+      initiationReason:
+        ctx.isOperator && args.input.isCardPayment
+          ? IncomingPaymentInitiationReason.Card
+          : IncomingPaymentInitiationReason.Admin,
+      senderWalletAddress: args.input.senderWalletAddress
+    })
+    const config = await ctx.container.use('config')
+    if (isIncomingPaymentError(incomingPaymentOrError)) {
+      throw new GraphQLError(errorToMessage[incomingPaymentOrError], {
+        extensions: {
+          code: errorToCode[incomingPaymentOrError]
+        }
+      })
+    } else
+      return {
+        payment: paymentToGraphql(incomingPaymentOrError, config)
+      }
+  }
+
+export const updateIncomingPayment: MutationResolvers<TenantedApolloContext>['updateIncomingPayment'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['IncomingPaymentResponse']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+    const incomingPaymentOrError = await incomingPaymentService.update({
+      ...args.input,
+      tenantId: ctx.tenant.id
+    })
+    const config = await ctx.container.use('config')
+    if (isIncomingPaymentError(incomingPaymentOrError)) {
+      throw new GraphQLError(errorToMessage[incomingPaymentOrError], {
+        extensions: {
+          code: errorToCode[incomingPaymentOrError]
+        }
+      })
+    } else
+      return {
+        payment: paymentToGraphql(incomingPaymentOrError, config)
+      }
+  }
+
+export const approveIncomingPayment: MutationResolvers<TenantedApolloContext>['approveIncomingPayment'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['ApproveIncomingPaymentResponse']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+
+    const incomingPaymentOrError = await incomingPaymentService.approve(
+      args.input.id,
+      ctx.tenant.id
+    )
+
+    if (isIncomingPaymentError(incomingPaymentOrError)) {
+      throw new GraphQLError(errorToMessage[incomingPaymentOrError], {
+        extensions: {
+          code: errorToCode[incomingPaymentOrError]
+        }
+      })
+    }
+
+    const config = await ctx.container.use('config')
+    return {
+      payment: paymentToGraphql(incomingPaymentOrError, config)
+    }
+  }
+
+export const cancelIncomingPayment: MutationResolvers<TenantedApolloContext>['cancelIncomingPayment'] =
+  async (
+    parent,
+    args,
+    ctx
+  ): Promise<ResolversTypes['CancelIncomingPaymentResponse']> => {
+    const incomingPaymentService = await ctx.container.use(
+      'incomingPaymentService'
+    )
+
+    const incomingPaymentOrError = await incomingPaymentService.cancel(
+      args.input.id,
+      ctx.tenant.id
+    )
+
+    if (isIncomingPaymentError(incomingPaymentOrError)) {
+      throw new GraphQLError(errorToMessage[incomingPaymentOrError], {
+        extensions: {
+          code: errorToCode[incomingPaymentOrError]
+        }
+      })
+    }
+
+    const config = await ctx.container.use('config')
+    return {
+      payment: paymentToGraphql(incomingPaymentOrError, config)
+    }
+  }
+
+export function paymentToGraphql(
+  payment: IncomingPayment,
+  config: IAppConfig
+): SchemaIncomingPayment {
+  return {
+    id: payment.id,
+    url: payment.getUrl(config.openPaymentsUrl),
+    walletAddressId: payment.walletAddressId,
+    client: payment.client,
+    state: payment.state,
+    expiresAt: payment.expiresAt.toISOString(),
+    incomingAmount: payment.incomingAmount,
+    receivedAmount: payment.receivedAmount,
+    metadata: payment.metadata,
+    createdAt: new Date(+payment.createdAt).toISOString(),
+    senderWalletAddress: payment.senderWalletAddress,
+    tenantId: payment.tenantId
+  }
+}

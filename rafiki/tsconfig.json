@@ -1,0 +1,15 @@
+{
+  "references": [
+    {
+      "path": "packages/token-introspection"
+    },
+    {
+      "path": "packages/auth"
+    },
+    {
+      "path": "packages/backend"
+    }
+  ],
+  "files": [],
+  "include": []
+}

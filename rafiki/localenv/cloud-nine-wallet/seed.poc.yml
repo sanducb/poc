@@ -1,0 +1,55 @@
+# Seed configuration for ILP → Rafiki → Ethereum POC
+#
+# Architecture:
+#   Sender Node (test.sender:7770) → Rafiki (test.rafiki) → Receiver Node (test.receiver:7780)
+#
+# Rafiki is peered with:
+# - Sender interledger-rs node (test.sender) on host:7770
+# - Receiver interledger-rs node (test.receiver) on host:7780
+
+assets:
+  - code: EURC
+    scale: 6
+    liquidity: 1000000000000
+    liquidityThreshold: 100000000000
+
+peeringAsset: 'EURC'
+
+peers:
+  # Peer with Sender Node (interledger-rs on port 7770)
+  - initialLiquidity: '500000000000'
+    peerUrl: http://host.docker.internal:7770/accounts/rafiki/ilp
+    peerIlpAddress: test.sender
+    liquidityThreshold: 100000000000
+    tokens:
+      incoming:
+        - sender-to-rafiki-token
+      outgoing: rafiki-to-sender-token
+    routes:
+      - "test.sender"
+
+  # Peer with Receiver Node (interledger-rs on port 7780, has ethereum-payout)
+  - initialLiquidity: '500000000000'
+    peerUrl: http://host.docker.internal:7780/accounts/rafiki/ilp
+    peerIlpAddress: test.receiver
+    liquidityThreshold: 100000000000
+    tokens:
+      incoming:
+        - receiver-to-rafiki-token
+      outgoing: rafiki-to-receiver-token
+    routes:
+      - "test.receiver"
+
+accounts:
+  - name: 'POC Sender'
+    path: accounts/poc-sender
+    id: 11111111-1111-1111-1111-111111111111
+    initialBalance: 100000000000
+    brunoEnvVar: pocSenderWalletAddress
+    assetCode: EURC
+
+rates:
+  EURC:
+    EURC: 1.0
+
+fees: []

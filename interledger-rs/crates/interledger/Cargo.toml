@@ -1,0 +1,63 @@
+[package]
+name = "interledger"
+version = "1.0.0"
+authors = ["Evan Schwartz <evan@ripple.com>"]
+description = "Interledger client library"
+license = "Apache-2.0"
+edition = "2018"
+repository = "https://github.com/interledger-rs/interledger-rs"
+
+[features]
+default = ["node"]
+node = [
+    "api",
+    "btp",
+    "ccp",
+    "http",
+    "ildcp",
+    "rates",
+    "router",
+    "service-util",
+    "settlement",
+    "spsp",
+    "store",
+    "stream",
+    "trace",
+]
+api = ["interledger-api"]
+btp = ["interledger-btp"]
+ccp = ["interledger-ccp"]
+http = ["interledger-http"]
+ildcp = ["interledger-ildcp"]
+rates = ["interledger-rates"]
+router = ["interledger-router"]
+service-util = ["interledger-service-util"]
+settlement = ["interledger-settlement" ]
+spsp = ["interledger-spsp", "stream"]
+store = ["interledger-store"]
+stream = ["interledger-stream", "ildcp"]
+trace = ["interledger-service/trace"]
+redis = ["interledger-store/redis"]
+# POC feature for Ethereum payouts
+ethereum-payout = ["interledger-stream/ethereum-payout"]
+
+[dependencies]
+interledger-api = { path = "../interledger-api", version = "1.0.0", optional = true, default-features = false }
+interledger-btp = { path = "../interledger-btp", version = "1.0.0", optional = true, default-features = false }
+interledger-ccp = { path = "../interledger-ccp", version = "1.0.0", optional = true, default-features = false }
+interledger-http = { path = "../interledger-http", version = "1.0.0", optional = true, default-features = false }
+interledger-ildcp = { path = "../interledger-ildcp", version = "1.0.0", optional = true, default-features = false }
+interledger-packet = { path = "../interledger-packet", version = "1.0.0", default-features = false }
+interledger-errors = { path = "../interledger-errors", version = "1.0.0", default-features = false }
+interledger-rates = { path = "../interledger-rates", version = "1.0.0", optional = true, default-features = false }
+interledger-router = { path = "../interledger-router", version = "1.0.0", optional = true, default-features = false }
+interledger-service = { path = "../interledger-service", version = "1.0.0", default-features = false }
+interledger-service-util = { path = "../interledger-service-util", version = "1.0.0", optional = true, default-features = false }
+interledger-settlement = { path = "../interledger-settlement", version = "1.0.0", optional = true, default-features = false }
+interledger-spsp = { path = "../interledger-spsp", version = "1.0.0", optional = true, default-features = false }
+interledger-stream = { path = "../interledger-stream", version = "1.0.0", optional = true, default-features = false }
+interledger-store = { path = "../interledger-store", version = "1.0.0", optional = true, default-features = false, features = ["redis"] }
+
+[badges]
+circle-ci = { repository = "interledger-rs/interledger-rs" }
+codecov = { repository = "interledger-rs/interledger-rs" }
