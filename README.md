@@ -145,7 +145,6 @@ sequenceDiagram
     Treasury->>Wallet: safeTransfer(EURC)
     Treasury-->>Receiver: Transaction confirmed
     
-    Note over Receiver,Sender: ILP Settlement
     Receiver-->>Rafiki: ILP Fulfill
     Rafiki-->>Sender: ILP Fulfill
     
